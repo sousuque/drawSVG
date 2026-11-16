@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>SVGお絵かき</title>
+<style>
+:root{--bg:#f3f4f6;--panel:#fff;--line:#d9dce1;--text:#1f2937;--muted:#6b7280;--accent:#2563eb;--accent-weak:#dbeafe;--canvasbg:#d1d5db;--btn:#f3f4f6}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1d21;--panel:#25282d;--line:#3a3e45;--text:#e5e7eb;--muted:#9ca3af;--accent:#60a5fa;--accent-weak:#1e3a5f;--canvasbg:#14161a;--btn:#31353c}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{font:14px/1.4 system-ui,"Hiragino Sans","Yu Gothic UI",Meiryo,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.btn{background:var(--btn);border:1px solid var(--line);border-radius:8px;padding:5px 10px;min-height:32px}
+.btn:hover{border-color:var(--accent)}
+.btn.on{background:var(--accent-weak);border-color:var(--accent);color:var(--accent);font-weight:600}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+header{display:flex;gap:6px;align-items:center;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header .sep{width:1px;height:22px;background:var(--line);margin:0 2px}
+header h1{font-size:15px;margin:0 6px 0 2px}
+main{flex:1;display:flex;min-height:0;position:relative}
+#tools{width:68px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:8px 6px;overflow:auto}
+#tools button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;padding:6px 2px;border-radius:10px;background:transparent;border:1px solid transparent}
+#tools button.on{background:var(--accent-weak);border-color:var(--accent);color:var(--accent)}
+#tools svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#vp{flex:1;position:relative;overflow:hidden;background:var(--canvasbg);touch-action:none;cursor:crosshair;min-width:0}
+#vp svg{display:block;width:100%;height:100%}
+#cursor{position:absolute;left:0;top:0;border-radius:50%;border:1px solid #000;box-shadow:0 0 0 1px #fff;pointer-events:none;display:none}
+#panel{width:288px;background:var(--panel);border-left:1px solid var(--line);overflow:auto;touch-action:pan-y;padding:8px 12px 24px}
+#panel section{padding:10px 0;border-bottom:1px solid var(--line)}
+#panel h3{font-size:12px;margin:0 0 6px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+#panel section[hidden]{display:none}
+.row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.row.sp{justify-content:space-between}
+input[type=range]{flex:1;min-width:0}
+input[type=number],input[type=text],select{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:4px 6px;min-height:30px}
+input[type=number]{width:76px}
+input[type=color]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:6px;background:none}
+.sw{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.sw i{width:24px;height:24px;border-radius:6px;border:1px solid var(--line);cursor:pointer}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.chips button{padding:2px 7px;min-height:26px;font-size:12px}
+#prev{height:104px;border:1px dashed var(--line);border-radius:8px;margin-top:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:repeating-conic-gradient(#8881 0 25%,#0000 0 50%) 0 0/16px 16px}
+#prev i{display:block;border-radius:50%;background:#000;flex:none}
+.small{font-size:12px;color:var(--muted)}
+.layer{display:flex;align-items:center;gap:4px;padding:3px 4px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px;background:var(--btn)}
+.layer.active{border-color:var(--accent);background:var(--accent-weak)}
+.layer .lname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 2px}
+.layer input{flex:1;min-width:0}
+.ib{background:none;border:0;padding:4px;display:flex;border-radius:6px}
+.ib:hover{background:#8883}
+.ib svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.lbtns{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.lbtns .btn{padding:3px 8px;min-height:28px;font-size:12px}
+#status{display:flex;gap:14px;padding:3px 10px;background:var(--panel);border-top:1px solid var(--line);font-size:12px;color:var(--muted);flex-wrap:wrap}
+#toast{position:fixed;left:50%;bottom:44px;transform:translateX(-50%);background:#111c;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+#busy{position:fixed;inset:0;background:#0004;display:none;align-items:center;justify-content:center;z-index:60;color:#fff;font-size:16px}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);padding:18px 20px;width:min(440px,92vw)}
+dialog::backdrop{background:#0006}
+dialog h2{margin:0 0 12px;font-size:17px}
+dialog label{display:flex;gap:8px;align-items:center;margin:6px 0}
+dialog fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0;padding:6px 12px 8px}
+dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+#sInfo{font-size:13px;margin-top:8px;min-height:36px;color:var(--muted)}
+#panelBtn{display:none}
+@media (max-width:860px){
+  #panelBtn{display:inline-block}
+  #panel{position:absolute;right:0;top:0;bottom:0;z-index:10;box-shadow:-4px 0 16px #0004;transform:translateX(100%);transition:transform .2s}
+  body.panel-open #panel{transform:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>SVGお絵かき</h1>
+  <button class="btn" id="bNew">新規</button>
+  <button class="btn primary" id="bSave">保存</button>
+  <button class="btn" id="bCanvas">キャンバス設定</button>
+  <span class="sep"></span>
+  <button class="btn" id="bUndo" title="元に戻す (Ctrl+Z)">↶ 戻す</button>
+  <button class="btn" id="bRedo" title="やり直し (Ctrl+Y)">↷ 進む</button>
+  <span class="sep"></span>
+  <button class="btn" id="bZout" title="縮小">－</button>
+  <button class="btn" id="bZoom" title="100%に戻す" style="min-width:64px">100%</button>
+  <button class="btn" id="bZin" title="拡大">＋</button>
+  <button class="btn" id="bFit">全体表示</button>
+  <span class="sep"></span>
+  <button class="btn on" id="bPalm" title="ONの間は指では描かず、ペンとマウスだけが描画します。指は2本でズーム／移動に使えます">パームリジェクション: ON</button>
+  <button class="btn" id="panelBtn">パネル</button>
+</header>
+<main>
+  <nav id="tools">
+    <button data-tool="pen" title="ペン (B)"><svg viewBox="0 0 24 24"><path d="M3 21l3.5-1L19 7.5a2.1 2.1 0 00-3-3L3.5 17 3 21z"/><path d="M14 6.5l3 3"/></svg>ペン</button>
+    <button data-tool="eraser" title="消しゴム (E)"><svg viewBox="0 0 24 24"><path d="M16 3l5 5-11 11H6l-3-3a1.5 1.5 0 010-2L16 3z"/><path d="M8 21h13"/></svg>消しゴム</button>
+    <button data-tool="fill" title="塗りつぶし (G)"><svg viewBox="0 0 24 24"><path d="M5 11l6-6 8 8-6 6a2 2 0 01-2.8 0L5 13.8a2 2 0 010-2.8z"/><path d="M11 5L9.5 3"/><path d="M20 16c1 1.5 1.5 2.5 1.5 3.5a1.5 1.5 0 01-3 0c0-1 .5-2 1.5-3.5z"/></svg>塗りつぶし</button>
+    <button data-tool="lasso" title="なげなわ選択 (L)"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="9" rx="8" ry="5" stroke-dasharray="3 2.5"/><path d="M8 13.5c-1 2 0 3.5 2 4s3 1 3 2.5"/></svg>なげなわ</button>
+    <button data-tool="hand" title="移動 (H / Space)"><svg viewBox="0 0 24 24"><path d="M8 13V5.5a1.5 1.5 0 013 0V11M11 11V4a1.5 1.5 0 013 0v7M14 11V5.5a1.5 1.5 0 013 0V13M17 9.5a1.5 1.5 0 013 0V15a7 7 0 01-7 7h-1a7 7 0 01-5.5-2.6L4 15a1.5 1.5 0 012.2-2L8 14.5"/></svg>手のひら</button>
+  </nav>
+  <div id="vp"><div id="cursor"></div></div>
+  <aside id="panel">
+    <section>
+      <h3>色</h3>
+      <div class="row"><input type="color" id="color" value="#1a1a1a"><span class="small" id="colorHex">#1a1a1a</span></div>
+      <div class="sw" id="swatches"></div>
+    </section>
+    <section class="opt" data-for="pen eraser">
+      <h3 id="sizeTitle">ペンの太さ (0.1〜100 px)</h3>
+      <div class="row"><input type="range" id="sizeRange" min="0" max="1000" step="1"><input type="number" id="sizeNum" min="0.1" max="100" step="0.1"></div>
+      <div class="chips" id="sizeChips"></div>
+      <div id="prev"><i id="prevDot"></i></div>
+    </section>
+    <section class="opt" data-for="pen fill">
+      <h3>不透明度</h3>
+      <div class="row"><input type="range" id="opRange" min="1" max="100" value="100"><span class="small" id="opVal">100%</span></div>
+    </section>
+    <section class="opt" data-for="pen">
+      <h3>手ぶれ補正</h3>
+      <div class="row"><input type="range" id="smRange" min="0" max="100" value="20"><span class="small" id="smVal">20</span></div>
+    </section>
+    <section class="opt" data-for="fill">
+      <h3>塗りつぶし設定</h3>
+      <div class="row"><span class="small" style="width:56px">許容値</span><input type="range" id="tolRange" min="0" max="160" value="32"><span class="small" id="tolVal">32</span></div>
+      <div class="row" style="margin-top:6px"><span class="small" style="width:56px">参照</span>
+        <select id="fillRef"><option value="all">表示中の全レイヤー</option><option value="cur">現在のレイヤーのみ</option></select></div>
+      <p class="small" style="margin:6px 0 0">線で囲まれた領域をクリックすると、ベクターの図形として塗りつぶします。</p>
+    </section>
+    <section class="opt" data-for="lasso">
+      <h3>なげなわ選択</h3>
+      <label class="row small"><input type="checkbox" id="lassoAll"> 全レイヤーから選択</label>
+      <div class="small" id="selInfo" style="margin:6px 0">囲んで選択 → ドラッグで移動、右下の○で拡大縮小</div>
+      <div class="row">
+        <button class="btn" id="bSelDel" disabled>削除</button>
+        <button class="btn" id="bSelDup" disabled>複製</button>
+        <button class="btn" id="bSelClr" disabled>選択解除</button>
+      </div>
+    </section>
+    <section>
+      <h3>レイヤー</h3>
+      <div id="layerList"></div>
+      <div class="row" style="margin-top:6px"><span class="small">不透明度</span><input type="range" id="layerOpacity" min="0" max="100" value="100"><span class="small" id="layerOpVal">100%</span></div>
+      <div class="lbtns">
+        <button class="btn" id="lAdd">＋追加</button>
+        <button class="btn" id="lDup">複製</button>
+        <button class="btn" id="lDel">削除</button>
+        <button class="btn" id="lUp">↑上へ</button>
+        <button class="btn" id="lDown">↓下へ</button>
+        <button class="btn" id="lMerge">下と結合</button>
+      </div>
+    </section>
+    <section>
+      <h3>操作ヒント</h3>
+      <div class="small">2本指: ズーム＆移動 / ホイール: ズーム / Shift+ホイール・Space+ドラッグ・中ボタン: 移動 / ペンの消しゴム端も使えます / [ ]: 太さ変更</div>
+    </section>
+  </aside>
+</main>
+<div id="status"><span id="stPos">x: -, y: -</span><span id="stTool"></span><span id="stPalm"></span></div>
+<div id="toast"></div>
+<div id="busy"><span id="busyMsg">処理中…</span></div>
+
+<dialog id="dlgSave">
+  <h2>保存</h2>
+  <label>形式
+    <select id="sFormat"><option value="svg">SVG（ベクター）</option><option value="png">PNG</option><option value="jpeg">JPEG</option></select>
+  </label>
+  <fieldset>
+    <legend>サイズ</legend>
+    <label><input type="radio" name="sMode" value="orig" checked> そのままのサイズで保存</label>
+    <label><input type="radio" name="sMode" value="comp"> 指定した容量まで圧縮して保存</label>
+    <div class="row" id="targetRow" style="margin-left:24px">上限 <input type="number" id="sTarget" min="1" step="any" value="500"> <select id="sUnit"><option value="1024">KB</option><option value="1048576">MB</option></select></div>
+  </fieldset>
+  <label id="hidRow"><input type="checkbox" id="sHidden"> 非表示レイヤーも含める（SVGのみ）</label>
+  <label><input type="checkbox" id="sTrans"> 背景を透明にする</label>
+  <label id="gzRow"><input type="checkbox" id="sGz"> gzip圧縮する (.svgz)</label>
+  <label>ファイル名 <input type="text" id="sName" value="drawing" style="flex:1"></label>
+  <div id="sInfo"></div>
+  <div class="actions"><button class="btn" id="sClose">閉じる</button><button class="btn primary" id="sGo">保存</button></div>
+</dialog>
+
+<dialog id="dlgCanvas">
+  <h2>キャンバス設定</h2>
+  <label>幅 <input type="number" id="cW" min="100" max="8000"> px</label>
+  <label>高さ <input type="number" id="cH" min="100" max="8000"> px</label>
+  <label>背景色 <input type="color" id="cBg"></label>
+  <label><input type="checkbox" id="cTrans"> 背景を透明にする</label>
+  <div class="actions"><button class="btn" id="cCancel">キャンセル</button><button class="btn primary" id="cOk">適用</button></div>
+</dialog>
+
+<script>
+(() => {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const fmt = (v, p = 2) => { let s = (+v).toFixed(p); if (s.indexOf('.') >= 0) s = s.replace(/\.?0+$/, ''); return (s === '-0' || s === '') ? '0' : s; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const tick = () => new Promise(r => setTimeout(r, 0));
+const MINK = 0.05, MAXK = 128, PEN_GRACE = 700, PALM_SIZE = 40;
+
+/* ================= 状態 ================= */
+const S = {
+  W: 1600, H: 1200, bg: '#ffffff', bgT: false,
+  tool: 'pen', color: '#1a1a1a', opacity: 100, smooth: 20,
+  size: { pen: 4, eraser: 24 }, tol: 32, fillRef: 'all', lassoAll: false,
+  palm: true, penSeen: false, view: { x: 0, y: 0, k: 1 }
+};
+let layers = [], activeId = null, layerSeq = 0;
+let sel = null;            // {els:[], bb:[]}
+let D = null;              // 現在の描画操作
+let G = null;              // ピンチジェスチャ
+const pointers = new Map();
+let lastPen = -1e9, penDown = false, spaceDown = false;
+
+/* ================= SVG 構造 ================= */
+const vp = $('#vp');
+const svg = el('svg', {}, vp);
+vp.insertBefore(svg, vp.firstChild);
+const defs = el('defs', {}, svg);
+const clip = el('clipPath', { id: 'pageclip' }, defs);
+const clipRect = el('rect', {}, clip);
+const pat = el('pattern', { id: 'checker', patternUnits: 'userSpaceOnUse', width: 32, height: 32 }, defs);
+el('rect', { width: 32, height: 32, fill: '#fff' }, pat);
+el('rect', { width: 16, height: 16, fill: '#d4d4d8' }, pat);
+el('rect', { x: 16, y: 16, width: 16, height: 16, fill: '#d4d4d8' }, pat);
+const world = el('g', {}, svg);
+const pageBg = el('rect', {}, world);
+const layersClip = el('g', { 'clip-path': 'url(#pageclip)' }, world);
+const layersG = el('g', {}, layersClip);
+const pageBorder = el('rect', { fill: 'none', stroke: '#888', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, world);
+const overlay = el('g', { 'pointer-events': 'none' }, world);
+const selG = el('g', {}, overlay);
+
+function updatePage() {
+  for (const r of [clipRect, pageBg, pageBorder]) { r.setAttribute('width', S.W); r.setAttribute('height', S.H); }
+  pageBg.setAttribute('fill', S.bgT ? 'url(#checker)' : S.bg);
+}
+function applyView() {
+  const v = S.view;
+  world.setAttribute('transform', `translate(${v.x} ${v.y}) scale(${v.k})`);
+  $('#bZoom').textContent = Math.round(v.k * 100) + '%';
+  drawSel(); updateCursorSize();
+}
+function toWorld(cx, cy) { const r = vp.getBoundingClientRect(); return [(cx - r.left - S.view.x) / S.view.k, (cy - r.top - S.view.y) / S.view.k]; }
+function zoomAt(cx, cy, f) {
+  const v = S.view, k = clamp(v.k * f, MINK, MAXK), wx = (cx - v.x) / v.k, wy = (cy - v.y) / v.k;
+  v.k = k; v.x = cx - wx * k; v.y = cy - wy * k; applyView();
+}
+function fit() {
+  const r = vp.getBoundingClientRect(); if (!r.width) return;
+  const k = clamp(Math.min((r.width - 40) / S.W, (r.height - 40) / S.H), MINK, 1);
+  S.view.k = k; S.view.x = (r.width - S.W * k) / 2; S.view.y = (r.height - S.H * k) / 2; applyView();
+}
+
+/* ================= 数学ヘルパー ================= */
+const mmul = (a, b) => [a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1], a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3], a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]];
+const minv = m => { const d = m[0]*m[3]-m[1]*m[2]; return [m[3]/d, -m[1]/d, -m[2]/d, m[0]/d, (m[2]*m[5]-m[3]*m[4])/d, (m[1]*m[4]-m[0]*m[5])/d]; };
+const mapply = (m, x, y) => [m[0]*x+m[2]*y+m[4], m[1]*x+m[3]*y+m[5]];
+function getM(e) {
+  const t = e.getAttribute('transform'); if (!t) return [1,0,0,1,0,0];
+  const n = t.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi); return n && n.length >= 6 ? n.slice(0, 6).map(Number) : [1,0,0,1,0,0];
+}
+function setM(e, m) { e.setAttribute('transform', `matrix(${m.map(v => +v.toFixed(6)).join(' ')})`); }
+function inLoop(P, x, y) {
+  let c = false; const n = P.length / 2;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = P[2*i], yi = P[2*i+1], xj = P[2*j], yj = P[2*j+1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+function segDist2(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, L = dx*dx + dy*dy;
+  let t = L ? ((px - x1) * dx + (py - y1) * dy) / L : 0; t = clamp(t, 0, 1);
+  const ex = px - (x1 + t*dx), ey = py - (y1 + t*dy); return ex*ex + ey*ey;
+}
+function rdp(P, eps) {
+  const n = P.length / 2; if (n < 3 || eps <= 0) return P;
+  const keep = new Uint8Array(n); keep[0] = keep[n-1] = 1;
+  const st = [0, n - 1];
+  while (st.length) {
+    const j = st.pop(), i = st.pop();
+    let md = 0, mi = -1;
+    for (let k = i + 1; k < j; k++) {
+      const d = segDist2(P[2*k], P[2*k+1], P[2*i], P[2*i+1], P[2*j], P[2*j+1]);
+      if (d > md) { md = d; mi = k; }
+    }
+    if (mi >= 0 && md > eps * eps) { keep[mi] = 1; st.push(i, mi, mi, j); }
+  }
+  const out = []; for (let k = 0; k < n; k++) if (keep[k]) out.push(P[2*k], P[2*k+1]); return out;
+}
+function rdpClosed(P, eps) {
+  const n = P.length / 2; if (n < 5 || eps <= 0) return P;
+  let f = 1, md = -1;
+  for (let k = 1; k < n; k++) { const d = (P[2*k]-P[0])**2 + (P[2*k+1]-P[1])**2; if (d > md) { md = d; f = k; } }
+  const a = rdp(P.slice(0, 2*f + 2), eps);
+  const b = rdp(P.slice(2*f).concat([P[0], P[1]]), eps);
+  return a.concat(b.slice(2, -2));
+}
+
+/* ================= パス生成 ================= */
+function strokeD(P, prec) {
+  const n = P.length / 2, f = v => fmt(v, prec);
+  if (n === 1) return `M${f(P[0])} ${f(P[1])}l.01 0`;
+  let d = `M${f(P[0])} ${f(P[1])}`;
+  if (n === 2) return d + `L${f(P[2])} ${f(P[3])}`;
+  for (let i = 1; i < n - 1; i++) d += `Q${f(P[2*i])} ${f(P[2*i+1])} ${f((P[2*i]+P[2*i+2])/2)} ${f((P[2*i+1]+P[2*i+3])/2)}`;
+  return d + `L${f(P[2*n-2])} ${f(P[2*n-1])}`;
+}
+function polyD(loops, prec) {
+  return loops.map(P => { let d = ''; for (let i = 0; i < P.length / 2; i++) d += (i ? 'L' : 'M') + fmt(P[2*i], prec) + ' ' + fmt(P[2*i+1], prec); return d + 'Z'; }).join('');
+}
+const ptsAttr = P => P.map(v => fmt(v, 2)).join(' ');
+function makeStrokeEl(P, color, w, op) {
+  const e = el('path', { d: strokeD(P, 2), stroke: color, 'stroke-width': fmt(w, 2), 'data-k': 's', 'data-p': ptsAttr(P) });
+  if (op < 1) e.setAttribute('stroke-opacity', fmt(op, 2));
+  return e;
+}
+function makeFillEl(loops, color, op) {
+  const e = el('path', { d: polyD(loops, 2), fill: color, 'fill-rule': 'evenodd', 'data-k': 'f', 'data-p': loops.map(ptsAttr).join('|') });
+  if (op < 1) e.setAttribute('fill-opacity', fmt(op, 2));
+  return e;
+}
+const metaMap = new WeakMap();
+function meta(e) {
+  let m = metaMap.get(e); if (m) return m;
+  const k = e.getAttribute('data-k');
+  const loops = (e.getAttribute('data-p') || '').split('|').map(s => s.split(' ').map(Number));
+  const w = k === 's' ? parseFloat(e.getAttribute('stroke-width')) || 0 : 0;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const P of loops) for (let i = 0; i < P.length; i += 2) { x0 = Math.min(x0, P[i]); x1 = Math.max(x1, P[i]); y0 = Math.min(y0, P[i+1]); y1 = Math.max(y1, P[i+1]); }
+  m = { k, loops, w, bb: [x0 - w/2, y0 - w/2, x1 + w/2, y1 + w/2] };
+  metaMap.set(e, m); return m;
+}
+
+/* ================= レイヤー ================= */
+const ICON = {
+  eye: '<svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" style="opacity:.45"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><path d="M3 3l18 18"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
+  unlock: '<svg viewBox="0 0 24 24" style="opacity:.4"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 017-2"/></svg>'
+};
+function newLayer(name, id) {
+  id = id || ++layerSeq; layerSeq = Math.max(layerSeq, id);
+  const g = el('g', { fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  return { id, name: name || `レイヤー ${id}`, visible: true, locked: false, opacity: 1, g, cache: '', dirty: true };
+}
+function applyLayerProps(L) { L.g.setAttribute('opacity', L.opacity); L.g.style.display = L.visible ? '' : 'none'; }
+const activeLayer = () => layers.find(l => l.id === activeId);
+const layerOf = e => layers.find(l => l.g === e.parentNode);
+const dirty = L => { if (L) L.dirty = true; };
+function syncLayersDOM() { layers.forEach(L => layersG.appendChild(L.g)); }
+
+function renderLayers() {
+  const box = $('#layerList'); box.innerHTML = '';
+  for (const L of [...layers].reverse()) {
+    const row = document.createElement('div');
+    row.className = 'layer' + (L.id === activeId ? ' active' : ''); row.dataset.id = L.id;
+    row.innerHTML = `<button class="ib eye" title="表示/非表示">${L.visible ? ICON.eye : ICON.eyeOff}</button><span class="lname"></span><button class="ib lock" title="ロック">${L.locked ? ICON.lock : ICON.unlock}</button>`;
+    row.querySelector('.lname').textContent = L.name;
+    box.appendChild(row);
+  }
+  const a = activeLayer();
+  if (a) { $('#layerOpacity').value = Math.round(a.opacity * 100); $('#layerOpVal').textContent = Math.round(a.opacity * 100) + '%'; }
+}
+$('#layerList').addEventListener('click', e => {
+  const row = e.target.closest('.layer'); if (!row) return;
+  const L = layers.find(l => l.id == row.dataset.id); if (!L) return;
+  if (e.target.closest('.eye')) { L.visible = !L.visible; applyLayerProps(L); pushHistory(); }
+  else if (e.target.closest('.lock')) { L.locked = !L.locked; pushHistory(); }
+  else if (e.target.tagName !== 'INPUT') { activeId = L.id; }
+  renderLayers();
+});
+$('#layerList').addEventListener('dblclick', e => {
+  const nm = e.target.closest('.lname'); if (!nm) return;
+  const L = layers.find(l => l.id == nm.parentNode.dataset.id); if (!L) return;
+  const inp = document.createElement('input'); inp.type = 'text'; inp.value = L.name;
+  nm.replaceWith(inp); inp.focus(); inp.select();
+  const done = ok => { if (ok && inp.value.trim()) { L.name = inp.value.trim(); pushHistory(); } renderLayers(); };
+  inp.addEventListener('blur', () => done(true)); inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') inp.blur(); if (ev.key === 'Escape') { inp.value = ''; inp.blur(); } });
+});
+$('#lAdd').onclick = () => { const L = newLayer(); layers.splice(layers.indexOf(activeLayer()) + 1, 0, L); activeId = L.id; syncLayersDOM(); renderLayers(); pushHistory(); };
+$('#lDup').onclick = () => {
+  const a = activeLayer(); const L = newLayer(a.name + ' コピー'); L.g.innerHTML = a.g.innerHTML; L.opacity = a.opacity;
+  applyLayerProps(L); layers.splice(layers.indexOf(a) + 1, 0, L); activeId = L.id; syncLayersDOM(); renderLayers(); pushHistory();
+};
+$('#lDel').onclick = () => {
+  if (layers.length < 2) return toast('最後のレイヤーは削除できません');
+  const i = layers.indexOf(activeLayer()); layers[i].g.remove(); layers.splice(i, 1);
+  activeId = layers[Math.min(i, layers.length - 1)].id; clearSel(); renderLayers(); pushHistory();
+};
+$('#lUp').onclick = () => { const i = layers.indexOf(activeLayer()); if (i < layers.length - 1) { [layers[i], layers[i+1]] = [layers[i+1], layers[i]]; syncLayersDOM(); renderLayers(); pushHistory(); } };
+$('#lDown').onclick = () => { const i = layers.indexOf(activeLayer()); if (i > 0) { [layers[i], layers[i-1]] = [layers[i-1], layers[i]]; syncLayersDOM(); renderLayers(); pushHistory(); } };
+$('#lMerge').onclick = () => {
+  const i = layers.indexOf(activeLayer()); if (i < 1) return toast('下にレイヤーがありません');
+  const a = layers[i], b = layers[i-1]; if (a.locked || b.locked) return toast('ロック中のレイヤーは結合できません');
+  while (a.g.firstChild) b.g.appendChild(a.g.firstChild);
+  dirty(b); a.g.remove(); layers.splice(i, 1); activeId = b.id; clearSel(); renderLayers(); pushHistory();
+};
+$('#layerOpacity').addEventListener('input', e => { const L = activeLayer(); L.opacity = e.target.value / 100; applyLayerProps(L); $('#layerOpVal').textContent = e.target.value + '%'; });
+$('#layerOpacity').addEventListener('change', () => pushHistory());
+
+/* ================= 履歴 ================= */
+const hist = { stack: [], idx: -1 };
+function snapshot() {
+  return { W: S.W, H: S.H, bg: S.bg, bgT: S.bgT, active: activeId, layers: layers.map(L => {
+    if (L.dirty) { L.cache = L.g.innerHTML; L.dirty = false; }
+    return { id: L.id, name: L.name, visible: L.visible, locked: L.locked, opacity: L.opacity, html: L.cache };
+  }) };
+}
+function restore(s) {
+  S.W = s.W; S.H = s.H; S.bg = s.bg; S.bgT = s.bgT;
+  layers = s.layers.map(d => { const L = newLayer(d.name, d.id); L.g.innerHTML = d.html; L.visible = d.visible; L.locked = d.locked; L.opacity = d.opacity; L.cache = d.html; L.dirty = false; applyLayerProps(L); return L; });
+  layersG.replaceChildren(...layers.map(l => l.g));
+  activeId = layers.some(l => l.id === s.active) ? s.active : layers[layers.length - 1].id;
+  sel = null; updatePage(); renderLayers(); drawSel();
+}
+let saveTimer = 0;
+function pushHistory() {
+  hist.stack.length = hist.idx + 1; hist.stack.push(snapshot()); hist.idx++;
+  if (hist.stack.length > 80) { hist.stack.shift(); hist.idx--; }
+  updateHistBtns(); clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem('svgdraw.v1', JSON.stringify(hist.stack[hist.idx])); } catch (e) {} }, 800);
+}
+function undo() { if (D) return; if (hist.idx > 0) { hist.idx--; restore(hist.stack[hist.idx]); updateHistBtns(); } }
+function redo() { if (D) return; if (hist.idx < hist.stack.length - 1) { hist.idx++; restore(hist.stack[hist.idx]); updateHistBtns(); } }
+function updateHistBtns() { $('#bUndo').disabled = hist.idx <= 0; $('#bRedo').disabled = hist.idx >= hist.stack.length - 1; }
+$('#bUndo').onclick = undo; $('#bRedo').onclick = redo;
+
+/* ================= UI 部品 ================= */
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2800); }
+function busy(msg) { $('#busy').style.display = msg ? 'flex' : 'none'; if (msg) $('#busyMsg').textContent = msg; }
+
+const SW = ['#1a1a1a', '#ffffff', '#e11d48', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#2563eb', '#7c3aed', '#ec4899', '#92400e', '#6b7280'];
+SW.forEach(c => { const i = document.createElement('i'); i.style.background = c; i.onclick = () => setColor(c); $('#swatches').appendChild(i); });
+function setColor(c) { S.color = c; $('#color').value = c; $('#colorHex').textContent = c; updatePrev(); }
+$('#color').addEventListener('input', e => setColor(e.target.value));
+
+const curKey = () => S.tool === 'eraser' ? 'eraser' : 'pen';
+const sizeToSlider = w => Math.round(1000 * Math.log(w / 0.1) / Math.log(1000));
+const sliderToSize = v => 0.1 * Math.pow(1000, v / 1000);
+function setSize(w) {
+  w = clamp(Math.round(w * 100) / 100, 0.1, 100); S.size[curKey()] = w;
+  $('#sizeNum').value = fmt(w, 2); $('#sizeRange').value = sizeToSlider(w); updatePrev(); updateCursorSize();
+}
+function updatePrev() {
+  const w = S.size[curKey()], d = $('#prevDot');
+  d.style.width = d.style.height = Math.max(w, 1) + 'px';
+  d.style.background = S.tool === 'eraser' ? 'transparent' : S.color;
+  d.style.border = S.tool === 'eraser' ? '1px solid #888' : '0'; d.style.opacity = S.tool === 'eraser' ? 1 : S.opacity / 100;
+}
+[0.1, 0.5, 1, 2, 4, 8, 16, 32, 64, 100].forEach(v => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = v; b.onclick = () => setSize(v); $('#sizeChips').appendChild(b); });
+$('#sizeRange').addEventListener('input', e => setSize(sliderToSize(+e.target.value)));
+$('#sizeNum').addEventListener('input', e => { const v = parseFloat(e.target.value); if (!isNaN(v)) { const w = clamp(Math.round(v * 100) / 100, 0.1, 100); S.size[curKey()] = w; $('#sizeRange').value = sizeToSlider(w); updatePrev(); updateCursorSize(); } });
+$('#sizeNum').addEventListener('change', () => setSize(S.size[curKey()]));
+$('#opRange').addEventListener('input', e => { S.opacity = +e.target.value; $('#opVal').textContent = S.opacity + '%'; updatePrev(); });
+$('#smRange').addEventListener('input', e => { S.smooth = +e.target.value; $('#smVal').textContent = S.smooth; });
+$('#tolRange').addEventListener('input', e => { S.tol = +e.target.value; $('#tolVal').textContent = S.tol; });
+$('#fillRef').addEventListener('change', e => S.fillRef = e.target.value);
+$('#lassoAll').addEventListener('change', e => S.lassoAll = e.target.checked);
+
+const TOOLNAME = { pen: 'ペン', eraser: '消しゴム', fill: '塗りつぶし', lasso: 'なげなわ', hand: '手のひら' };
+function setTool(t) {
+  if (S.tool === 'lasso' && t !== 'lasso') clearSel();
+  S.tool = t;
+  document.querySelectorAll('#tools button').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  document.querySelectorAll('.opt').forEach(o => o.hidden = !o.dataset.for.split(' ').includes(t));
+  $('#sizeTitle').textContent = (t === 'eraser' ? '消しゴムの太さ' : 'ペンの太さ') + ' (0.1〜100 px)';
+  setSize(S.size[curKey()]);
+  vp.style.cursor = t === 'hand' ? 'grab' : 'crosshair'; $('#stTool').textContent = 'ツール: ' + TOOLNAME[t];
+  if (t !== 'pen' && t !== 'eraser') $('#cursor').style.display = 'none';
+}
+document.querySelectorAll('#tools button').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+
+function setPalm(on) {
+  S.palm = on; $('#bPalm').classList.toggle('on', on); $('#bPalm').textContent = 'パームリジェクション: ' + (on ? 'ON' : 'OFF');
+  $('#stPalm').textContent = on ? '指では描画しません（ペン／マウスのみ・2本指でズーム）' : '指でも描画できます（2本指でズーム）';
+  toast(on ? 'パームリジェクション ON：ペン／マウスのみ描画' : 'パームリジェクション OFF：指でも描画できます');
+}
+$('#bPalm').onclick = () => setPalm(!S.palm);
+$('#bZin').onclick = () => { const r = vp.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1.25); };
+$('#bZout').onclick = () => { const r = vp.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 0.8); };
+$('#bZoom').onclick = () => { const r = vp.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, 1 / S.view.k); };
+$('#bFit').onclick = fit;
+$('#panelBtn').onclick = () => document.body.classList.toggle('panel-open');
+$('#bNew').onclick = () => {
+  if (!confirm('新規作成しますか？（現在の絵は消えます。「戻す」で復元できます）')) return;
+  layers.forEach(l => l.g.remove()); layers = []; const L = newLayer(); layers.push(L); activeId = L.id; syncLayersDOM(); clearSel(); renderLayers(); pushHistory();
+};
+
+/* カーソルリング */
+const cursor = $('#cursor');
+function updateCursorSize() { const d = Math.max(S.size[curKey()] * S.view.k, 4); cursor.style.width = cursor.style.height = d + 'px'; cursor.style.marginLeft = cursor.style.marginTop = (-d / 2) + 'px'; }
+function moveCursor(e) {
+  if (e.pointerType === 'touch' || (S.tool !== 'pen' && S.tool !== 'eraser') || spaceDown) { cursor.style.display = 'none'; return; }
+  const r = vp.getBoundingClientRect(); cursor.style.display = 'block';
+  cursor.style.transform = `translate(${e.clientX - r.left}px,${e.clientY - r.top}px)`;
+}
+vp.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') cursor.style.display = 'none'; });
+
+/* ================= 選択 ================= */
+function selBBox(els) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const e of els) {
+    const m = meta(e), M = getM(e), [a, b, c, d] = m.bb;
+    for (const [px, py] of [[a, b], [c, b], [c, d], [a, d]]) { const [X, Y] = mapply(M, px, py); x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); }
+  }
+  return [x0, y0, x1, y1];
+}
+function drawSel() {
+  selG.replaceChildren();
+  if (!sel || !sel.els.length) { updateSelUI(); return; }
+  const [x0, y0, x1, y1] = sel.bb = selBBox(sel.els), k = S.view.k;
+  el('rect', { x: x0, y: y0, width: x1 - x0, height: y1 - y0, fill: 'rgba(37,99,235,.06)', stroke: '#2563eb', 'stroke-width': 1.5, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, selG);
+  el('circle', { cx: x1, cy: y1, r: 8 / k, fill: '#fff', stroke: '#2563eb', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }, selG);
+  updateSelUI();
+}
+function updateSelUI() {
+  const n = sel ? sel.els.length : 0;
+  $('#selInfo').textContent = n ? `${n}個を選択中：ドラッグで移動、右下の○で拡大縮小` : '囲んで選択 → ドラッグで移動、右下の○で拡大縮小';
+  for (const id of ['#bSelDel', '#bSelDup', '#bSelClr']) $(id).disabled = !n;
+}
+function clearSel() { sel = null; drawSel(); }
+function deleteSel() {
+  if (!sel) return; for (const e of sel.els) { dirty(layerOf(e)); e.remove(); }
+  sel = null; drawSel(); pushHistory();
+}
+function dupSel() {
+  if (!sel) return; const clones = [];
+  for (const e of sel.els) {
+    const c = e.cloneNode(true), L = layerOf(e); e.after(c); dirty(L);
+    const M = getM(c); setM(c, mmul([1,0,0,1,24,24], M)); clones.push(c);
+  }
+  sel = { els: clones }; drawSel(); pushHistory();
+}
+$('#bSelDel').onclick = deleteSel; $('#bSelDup').onclick = dupSel; $('#bSelClr').onclick = clearSel;
+function selHit(wx, wy) {
+  if (!sel || !sel.bb) return null; const [x0, y0, x1, y1] = sel.bb, k = S.view.k;
+  if (Math.hypot(wx - x1, wy - y1) <= 14 / k) return 'scale';
+  if (wx >= x0 - 6 / k && wx <= x1 + 6 / k && wy >= y0 - 6 / k && wy <= y1 + 6 / k) return 'move';
+  return null;
+}
+function lassoSelect(poly) {
+  const Ls = S.lassoAll ? layers.filter(l => l.visible && !l.locked) : [activeLayer()].filter(l => l && l.visible && !l.locked);
+  const out = [];
+  for (const L of Ls) for (const e of L.g.children) {
+    const m = meta(e), M = getM(e); let tot = 0, inn = 0;
+    for (const P of m.loops) {
+      const n = P.length / 2, step = Math.max(1, Math.floor(n / 60));
+      for (let i = 0; i < n; i += step) { const [x, y] = mapply(M, P[2*i], P[2*i+1]); tot++; if (inLoop(poly, x, y)) inn++; }
+    }
+    if (tot && inn / tot >= 0.5) out.push(e);
+  }
+  return out;
+}
+
+/* ================= 消しゴム ================= */
+function hitEl(e, x, y, r) {
+  const m = meta(e), M = getM(e), inv = minv(M), [lx, ly] = mapply(inv, x, y);
+  const sc = Math.sqrt(Math.abs(M[0]*M[3] - M[1]*M[2])) || 1, lr = r / sc, bb = m.bb;
+  if (lx < bb[0] - lr || lx > bb[2] + lr || ly < bb[1] - lr || ly > bb[3] + lr) return false;
+  if (m.k === 's') {
+    const P = m.loops[0], t = lr + m.w / 2, t2 = t * t;
+    if (P.length === 2) return (P[0]-lx)**2 + (P[1]-ly)**2 <= t2;
+    for (let i = 0; i < P.length - 2; i += 2) if (segDist2(lx, ly, P[i], P[i+1], P[i+2], P[i+3]) <= t2) return true;
+    return false;
+  }
+  let c = false; for (const P of m.loops) if (inLoop(P, lx, ly)) c = !c; return c;
+}
+function eraseAt(x, y) {
+  const r = S.size.eraser / 2;
+  for (const e of [...D.L.g.children]) if (hitEl(e, x, y, r)) { e.remove(); D.n++; dirty(D.L); }
+}
+
+/* ================= 塗りつぶし ================= */
+async function loadImg(url) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; }); }
+async function svgToCanvas(str, w, h, bgFill) {
+  const url = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml' }));
+  try {
+    const img = await loadImg(url), c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); if (bgFill) { ctx.fillStyle = bgFill; ctx.fillRect(0, 0, w, h); }
+    ctx.drawImage(img, 0, 0, w, h); return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+function floodMask(data, w, h, sx, sy, tol) {
+  const mask = new Uint8Array(w * h), si = (sy * w + sx) * 4, sr = data[si], sg = data[si+1], sb = data[si+2];
+  const match = i4 => Math.abs(data[i4]-sr) <= tol && Math.abs(data[i4+1]-sg) <= tol && Math.abs(data[i4+2]-sb) <= tol;
+  const st = [sx, sy];
+  while (st.length) {
+    const y = st.pop(), x = st.pop(); let i = y * w + x;
+    if (mask[i] || !match(i * 4)) continue;
+    let xl = x, xr = x;
+    while (xl > 0 && !mask[y*w+xl-1] && match((y*w+xl-1)*4)) xl--;
+    while (xr < w - 1 && !mask[y*w+xr+1] && match((y*w+xr+1)*4)) xr++;
+    for (let xx = xl; xx <= xr; xx++) mask[y*w+xx] = 1;
+    for (const ny of [y - 1, y + 1]) {
+      if (ny < 0 || ny >= h) continue; let run = false;
+      for (let xx = xl; xx <= xr; xx++) {
+        const ok = !mask[ny*w+xx] && match((ny*w+xx)*4);
+        if (ok && !run) { st.push(xx, ny); run = true; } else if (!ok) run = false;
+      }
+    }
+  }
+  return mask;
+}
+function dilate(mask, w, h) {
+  const out = new Uint8Array(mask);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask[y*w+x]) {
+    if (x > 0) out[y*w+x-1] = 1; if (x < w-1) out[y*w+x+1] = 1; if (y > 0) out[(y-1)*w+x] = 1; if (y < h-1) out[(y+1)*w+x] = 1;
+  }
+  return out;
+}
+function traceMask(mask, w, h) {
+  const W1 = w + 1, next = new Map();
+  const add = (a, b) => { const l = next.get(a); if (l) l.push(b); else next.set(a, [b]); };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!mask[y*w+x]) continue;
+    if (y === 0 || !mask[(y-1)*w+x]) add(y*W1+x, y*W1+x+1);
+    if (x === w-1 || !mask[y*w+x+1]) add(y*W1+x+1, (y+1)*W1+x+1);
+    if (y === h-1 || !mask[(y+1)*w+x]) add((y+1)*W1+x+1, (y+1)*W1+x);
+    if (x === 0 || !mask[y*w+x-1]) add((y+1)*W1+x, y*W1+x);
+  }
+  const loops = [];
+  for (const [start, list] of next) while (list.length) {
+    const ids = [start]; let b = list.pop();
+    while (b !== start) { ids.push(b); b = next.get(b).pop(); }
+    // 一直線上の頂点を除去しつつ座標へ
+    const n = ids.length, P = [];
+    for (let i = 0; i < n; i++) {
+      const a = ids[(i + n - 1) % n], c = ids[i], d = ids[(i + 1) % n];
+      const ax = a % W1, ay = (a / W1) | 0, cx = c % W1, cy = (c / W1) | 0, dx = d % W1, dy = (d / W1) | 0;
+      if ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx) !== 0) P.push(cx, cy);
+    }
+    if (P.length >= 6) loops.push(P);
+  }
+  return loops;
+}
+async function doFill(wx, wy) {
+  if (wx < 0 || wy < 0 || wx >= S.W || wy >= S.H) return;
+  const L = activeLayer(); busy('塗りつぶし中…'); await tick();
+  try {
+    const sc = Math.min(2, 3000 / Math.max(S.W, S.H)), w = Math.max(1, Math.round(S.W * sc)), h = Math.max(1, Math.round(S.H * sc));
+    const list = S.fillRef === 'all' ? layers.filter(l => l.visible) : [L];
+    let inner = '';
+    for (const l of list) inner += `<g fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${l.opacity}">${l.g.innerHTML.replace(/ data-p="[^"]*"/g, '')}</g>`;
+    const str = `<svg xmlns="${NS}" width="${w}" height="${h}" viewBox="0 0 ${S.W} ${S.H}"><rect width="${S.W}" height="${S.H}" fill="${S.bgT ? '#fff' : S.bg}"/>${inner}</svg>`;
+    const cv = await svgToCanvas(str, w, h), data = cv.getContext('2d').getImageData(0, 0, w, h).data;
+    const sx = clamp(Math.floor(wx * sc), 0, w - 1), sy = clamp(Math.floor(wy * sc), 0, h - 1);
+    let mask = floodMask(data, w, h, sx, sy, S.tol);
+    mask = dilate(mask, w, h); if (sc >= 1.5) mask = dilate(mask, w, h);
+    await tick();
+    const loops = traceMask(mask, w, h).map(P => rdpClosed(P, 1.0)).filter(P => P.length >= 6).map(P => P.map(v => v / sc));
+    if (!loops.length) { toast('塗りつぶす領域がありません'); return; }
+    const e = makeFillEl(loops, S.color, S.opacity / 100);
+    L.g.insertBefore(e, L.g.firstChild); dirty(L); pushHistory();
+  } catch (err) { console.error(err); toast('塗りつぶしに失敗しました'); }
+  finally { busy(null); }
+}
+
+/* ================= ポインタ操作 ================= */
+const effTool = e => (e.pointerType === 'pen' && (e.buttons & 32)) ? 'eraser' : S.tool;
+function abortDraw() {
+  if (!D) return;
+  if (D.path) D.path.remove();
+  if (D.kind === 'selmove') { sel.els.forEach((e, i) => setM(e, D.orig[i])); drawSel(); }
+  D = null;
+}
+function startGesture() {
+  const t = [...pointers.entries()].filter(([, p]) => p.type === 'touch');
+  t.forEach(([, p]) => p.idle = true);
+  const a = t[0][1], b = t[1][1], r = vp.getBoundingClientRect();
+  const cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
+  G = { ids: [t[0][0], t[1][0]], d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, k0: S.view.k, wx: (cx - S.view.x) / S.view.k, wy: (cy - S.view.y) / S.view.k };
+}
+function updateGesture() {
+  const a = pointers.get(G.ids[0]), b = pointers.get(G.ids[1]); if (!a || !b) return;
+  const r = vp.getBoundingClientRect(), cx = (a.x + b.x) / 2 - r.left, cy = (a.y + b.y) / 2 - r.top;
+  const k = clamp(G.k0 * Math.hypot(a.x - b.x, a.y - b.y) / G.d0, MINK, MAXK);
+  S.view.k = k; S.view.x = cx - G.wx * k; S.view.y = cy - G.wy * k; applyView();
+}
+const coalesced = e => { const l = e.getCoalescedEvents ? e.getCoalescedEvents() : []; return l.length ? l : [e]; };
+
+vp.addEventListener('pointerdown', e => {
+  const now = performance.now();
+  if (e.pointerType === 'pen') { S.penSeen = true; lastPen = now; penDown = true; }
+  if (e.pointerType === 'touch' && S.palm) {
+    if (penDown || now - lastPen < PEN_GRACE) return;               // ペン使用中の手のひら
+    if (Math.max(e.width || 0, e.height || 0) > PALM_SIZE) return;  // 接触面が大きい＝手のひら
+  }
+  e.preventDefault();
+  try { vp.setPointerCapture(e.pointerId); } catch (_) {}
+  pointers.set(e.pointerId, { type: e.pointerType, x: e.clientX, y: e.clientY });
+  if (e.pointerType === 'touch') {
+    const t = [...pointers.values()].filter(p => p.type === 'touch');
+    if (t.length >= 2) { abortDraw(); startGesture(); return; }
+    if (S.palm) { pointers.get(e.pointerId).idle = true; if (!S.penSeen) toast('パームリジェクションON：指では描けません（2本指でズーム／移動、OFFで指描画）'); return; }
+  }
+  if (G || D) return;
+  const tool = effTool(e), [wx, wy] = toWorld(e.clientX, e.clientY);
+  const pan = (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2)) || spaceDown || tool === 'hand';
+  if (pan) { D = { kind: 'pan', id: e.pointerId, sx: e.clientX, sy: e.clientY, vx: S.view.x, vy: S.view.y }; vp.style.cursor = 'grabbing'; return; }
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (tool === 'pen' || tool === 'eraser' || tool === 'fill') {
+    const L = activeLayer();
+    if (!L || L.locked || !L.visible) { toast('このレイヤーは編集できません（ロック中または非表示）'); return; }
+  }
+  if (tool === 'pen') {
+    const w = S.size.pen;
+    D = { kind: 'pen', id: e.pointerId, L: activeLayer(), P: [wx, wy], sx: wx, sy: wy, w, color: S.color, op: S.opacity / 100,
+      base: `M${fmt(wx)} ${fmt(wy)}`, path: el('path', { fill: 'none', stroke: S.color, 'stroke-width': fmt(w, 2), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-opacity': S.opacity / 100 }, overlay) };
+    D.path.setAttribute('d', D.base + `L${fmt(wx + 0.01)} ${fmt(wy)}`);
+  } else if (tool === 'eraser') {
+    D = { kind: 'eraser', id: e.pointerId, L: activeLayer(), lx: wx, ly: wy, n: 0 }; eraseAt(wx, wy);
+  } else if (tool === 'fill') {
+    D = { kind: 'fill', id: e.pointerId, sx: e.clientX, sy: e.clientY, wx, wy, moved: false };
+  } else if (tool === 'lasso') {
+    const hit = selHit(wx, wy);
+    if (hit) {
+      D = { kind: 'selmove', id: e.pointerId, mode: hit, sx: wx, sy: wy, orig: sel.els.map(getM), bb: sel.bb.slice() };
+    } else {
+      clearSel();
+      D = { kind: 'lasso', id: e.pointerId, P: [wx, wy], path: el('path', { fill: 'rgba(37,99,235,.08)', stroke: '#2563eb', 'stroke-width': 1.5, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, overlay) };
+    }
+  }
+});
+
+vp.addEventListener('pointermove', e => {
+  const now = performance.now();
+  if (e.pointerType === 'pen') lastPen = now;
+  moveCursor(e);
+  const [wx, wy] = toWorld(e.clientX, e.clientY);
+  $('#stPos').textContent = `x: ${wx.toFixed(1)}, y: ${wy.toFixed(1)}`;
+  const p = pointers.get(e.pointerId); if (!p) return;
+  p.x = e.clientX; p.y = e.clientY;
+  if (G && p.type === 'touch') { if (!(S.palm && penDown)) updateGesture(); return; }
+  if (!D || D.id !== e.pointerId) return;
+  switch (D.kind) {
+    case 'pan': S.view.x = D.vx + e.clientX - D.sx; S.view.y = D.vy + e.clientY - D.sy; applyView(); break;
+    case 'pen': {
+      const a = 1 - 0.92 * clamp(S.smooth / 100, 0, 1), P = D.P, f = v => fmt(v);
+      for (const ev of coalesced(e)) {
+        const [x, y] = toWorld(ev.clientX, ev.clientY);
+        D.sx += (x - D.sx) * a; D.sy += (y - D.sy) * a;
+        if (Math.hypot(D.sx - P[P.length-2], D.sy - P[P.length-1]) < 0.4 / S.view.k) continue;
+        P.push(D.sx, D.sy); const n = P.length / 2;
+        if (n >= 3) { const i = n - 2; D.base += `Q${f(P[2*i])} ${f(P[2*i+1])} ${f((P[2*i]+P[2*i+2])/2)} ${f((P[2*i+1]+P[2*i+3])/2)}`; }
+      }
+      D.path.setAttribute('d', D.base + `L${f(P[P.length-2])} ${f(P[P.length-1])}`); break;
+    }
+    case 'eraser': {
+      for (const ev of coalesced(e)) {
+        const [x, y] = toWorld(ev.clientX, ev.clientY), dist = Math.hypot(x - D.lx, y - D.ly), step = Math.max(S.size.eraser * 0.25, 0.5 / S.view.k);
+        const n = Math.max(1, Math.ceil(dist / step));
+        for (let i = 1; i <= n; i++) eraseAt(D.lx + (x - D.lx) * i / n, D.ly + (y - D.ly) * i / n);
+        D.lx = x; D.ly = y;
+      }
+      break;
+    }
+    case 'fill': if (Math.hypot(e.clientX - D.sx, e.clientY - D.sy) > 8) D.moved = true; break;
+    case 'lasso': {
+      const P = D.P; if (Math.hypot(wx - P[P.length-2], wy - P[P.length-1]) * S.view.k < 2) break;
+      P.push(wx, wy); let d = ''; for (let i = 0; i < P.length; i += 2) d += (i ? 'L' : 'M') + fmt(P[i], 1) + ' ' + fmt(P[i+1], 1);
+      D.path.setAttribute('d', d + 'Z'); break;
+    }
+    case 'selmove': {
+      if (D.mode === 'move') {
+        const dx = wx - D.sx, dy = wy - D.sy; sel.els.forEach((el_, i) => setM(el_, mmul([1,0,0,1,dx,dy], D.orig[i])));
+      } else {
+        const [x0, y0, x1, y1] = D.bb, vx = x1 - x0, vy = y1 - y0, L2 = vx*vx + vy*vy;
+        const s = L2 ? Math.max(0.02, ((wx - x0) * vx + (wy - y0) * vy) / L2) : 1;
+        sel.els.forEach((el_, i) => setM(el_, mmul([s,0,0,s,x0*(1-s),y0*(1-s)], D.orig[i])));
+      }
+      drawSel(); break;
+    }
+  }
+});
+
+function finish(e, cancelled) {
+  const d = D; D = null;
+  if (d.kind === 'pan') { vp.style.cursor = S.tool === 'hand' ? 'grab' : 'crosshair'; return; }
+  if (cancelled) { if (d.path) d.path.remove(); if (d.kind === 'selmove') { sel.els.forEach((el_, i) => setM(el_, d.orig[i])); drawSel(); } if (d.kind === 'eraser' && d.n) pushHistory(); return; }
+  switch (d.kind) {
+    case 'pen': {
+      const P = d.P, lx = d.sx, ly = d.sy;
+      if (Math.hypot(lx - P[P.length-2], ly - P[P.length-1]) > 0.01) P.push(lx, ly);
+      d.path.remove(); const el_ = makeStrokeEl(P, d.color, d.w, d.op);
+      d.L.g.appendChild(el_); dirty(d.L); pushHistory(); break;
+    }
+    case 'eraser': if (d.n) pushHistory(); break;
+    case 'fill': if (!d.moved) doFill(d.wx, d.wy); break;
+    case 'lasso': {
+      d.path.remove(); const P = d.P;
+      if (P.length >= 6) { const els = lassoSelect(P); sel = els.length ? { els } : null; if (!els.length) toast('選択できる図形がありません（現在のレイヤーを確認）'); }
+      drawSel(); break;
+    }
+    case 'selmove': { sel.els.forEach(el_ => dirty(layerOf(el_))); pushHistory(); drawSel(); break; }
+  }
+}
+function onUp(e) {
+  const p = pointers.get(e.pointerId); pointers.delete(e.pointerId);
+  if (e.pointerType === 'pen') { penDown = false; lastPen = performance.now(); }
+  if (G && G.ids.includes(e.pointerId)) G = null;
+  if (D && D.id === e.pointerId) finish(e, e.type === 'pointercancel');
+}
+vp.addEventListener('pointerup', onUp);
+vp.addEventListener('pointercancel', onUp);
+vp.addEventListener('contextmenu', e => e.preventDefault());
+vp.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = vp.getBoundingClientRect(), mul = e.deltaMode === 1 ? 33 : 1;
+  if (e.shiftKey && !e.ctrlKey) { S.view.x -= (e.deltaX || e.deltaY) * mul; applyView(); return; }
+  zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * mul * (e.ctrlKey ? 0.01 : 0.0015)));
+}, { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+/* キーボード */
+addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select') && !(e.ctrlKey || e.metaKey)) return;
+  if (document.querySelector('dialog[open]')) return;
+  const k = e.key.toLowerCase(), c = e.ctrlKey || e.metaKey;
+  if (e.code === 'Space') { if (!spaceDown) { spaceDown = true; vp.style.cursor = 'grab'; cursor.style.display = 'none'; } e.preventDefault(); return; }
+  if (c && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (c && k === 'y') { e.preventDefault(); redo(); }
+  else if (c && k === 's') { e.preventDefault(); openSave(); }
+  else if (c && k === 'd') { e.preventDefault(); dupSel(); }
+  else if (!c && k === 'b') setTool('pen'); else if (!c && k === 'e') setTool('eraser');
+  else if (!c && k === 'g') setTool('fill'); else if (!c && k === 'l') setTool('lasso'); else if (!c && k === 'h') setTool('hand');
+  else if (k === 'delete' || k === 'backspace') { if (sel) { e.preventDefault(); deleteSel(); } }
+  else if (k === 'escape') clearSel();
+  else if (k === '[') setSize(S.size[curKey()] * 0.8); else if (k === ']') setSize(S.size[curKey()] * 1.25);
+  else if (k === '+' || k === '=') $('#bZin').click(); else if (k === '-') $('#bZout').click();
+});
+addEventListener('keyup', e => { if (e.code === 'Space') { spaceDown = false; vp.style.cursor = S.tool === 'hand' ? 'grab' : 'crosshair'; } });
+
+/* ================= キャンバス設定 ================= */
+$('#bCanvas').onclick = () => { $('#cW').value = S.W; $('#cH').value = S.H; $('#cBg').value = S.bg; $('#cTrans').checked = S.bgT; $('#dlgCanvas').showModal(); };
+$('#cCancel').onclick = () => $('#dlgCanvas').close();
+$('#cOk').onclick = () => {
+  S.W = clamp(parseInt($('#cW').value) || S.W, 100, 8000); S.H = clamp(parseInt($('#cH').value) || S.H, 100, 8000);
+  S.bg = $('#cBg').value; S.bgT = $('#cTrans').checked; updatePage(); fit(); pushHistory(); $('#dlgCanvas').close();
+};
+
+/* ================= 保存 ================= */
+const EPS = [0, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 40, 64];
+const precFor = eps => eps <= 0.1 ? 2 : eps <= 0.75 ? 1 : 0;
+function pathStr(e, prec, eps) {
+  const m = meta(e), t = e.getAttribute('transform'), tr = t ? ` transform="${t}"` : '';
+  if (m.k === 's') {
+    const P = eps > 0 ? rdp(m.loops[0], eps) : m.loops[0], op = e.getAttribute('stroke-opacity');
+    return `<path d="${strokeD(P, prec)}" stroke="${e.getAttribute('stroke')}" stroke-width="${e.getAttribute('stroke-width')}"${op ? ` stroke-opacity="${op}"` : ''}${tr}/>`;
+  }
+  const loops = (eps > 0 ? m.loops.map(P => rdpClosed(P, eps)) : m.loops).filter(P => P.length >= 6), op = e.getAttribute('fill-opacity');
+  return `<path d="${polyD(loops, prec)}" fill="${e.getAttribute('fill')}" fill-rule="evenodd"${op ? ` fill-opacity="${op}"` : ''}${tr}/>`;
+}
+function exportSVGString({ prec = 2, eps = 0, hidden = false, transparent = S.bgT } = {}) {
+  const parts = [`<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="${NS}" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${S.W}" height="${S.H}" viewBox="0 0 ${S.W} ${S.H}">`];
+  if (!transparent) parts.push(`<rect width="${S.W}" height="${S.H}" fill="${S.bg}"/>`);
+  for (const L of layers) {
+    if (!L.visible && !hidden) continue; if (!L.g.children.length) continue;
+    const items = []; for (const e of L.g.children) items.push(pathStr(e, prec, eps));
+    parts.push(`<g id="layer${L.id}" inkscape:groupmode="layer" inkscape:label="${esc(L.name)}" fill="none" stroke-linecap="round" stroke-linejoin="round"${L.opacity < 1 ? ` opacity="${fmt(L.opacity, 2)}"` : ''}${!L.visible ? ' display="none"' : ''}>${items.join('')}</g>`);
+  }
+  parts.push('</svg>'); return parts.join('\n');
+}
+const strBytes = s => new Blob([s]).size;
+async function gzipBlob(str) { return new Response(new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))).blob(); }
+const hasGz = typeof CompressionStream !== 'undefined';
+function fmtBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(2) + ' MB' : n >= 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B'; }
+function download(blob, name) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+const dlg = $('#dlgSave'), sInfo = $('#sInfo');
+const sOpts = () => ({ fmt: $('#sFormat').value, comp: document.querySelector('input[name=sMode]:checked').value === 'comp',
+  target: Math.max(1, (parseFloat($('#sTarget').value) || 1) * +$('#sUnit').value), hidden: $('#sHidden').checked, trans: $('#sTrans').checked, gz: $('#sGz').checked && hasGz, name: ($('#sName').value.trim() || 'drawing').replace(/[\\/:*?"<>|]/g, '_') });
+function syncSaveUI() {
+  const o = sOpts(), svgF = o.fmt === 'svg';
+  $('#targetRow').style.opacity = o.comp ? 1 : .4; $('#sTarget').disabled = $('#sUnit').disabled = !o.comp;
+  $('#hidRow').style.display = $('#gzRow').style.display = svgF ? '' : 'none';
+  $('#gzRow').style.opacity = hasGz ? 1 : .4; $('#sGz').disabled = !hasGz;
+  if (o.fmt === 'jpeg') { $('#sTrans').checked = false; } $('#sTrans').disabled = o.fmt === 'jpeg';
+  estimate();
+}
+let estTimer = 0;
+function estimate() {
+  clearTimeout(estTimer);
+  estTimer = setTimeout(async () => {
+    const o = sOpts();
+    if (o.fmt !== 'svg') { sInfo.textContent = `出力サイズ: ${S.W} × ${S.H} px（原寸）`; return; }
+    const s = exportSVGString({ hidden: o.hidden, transparent: o.trans });
+    const size = o.gz ? (await gzipBlob(s)).size : strBytes(s);
+    sInfo.textContent = `そのままのサイズで保存した場合: 約 ${fmtBytes(size)}`;
+  }, 150);
+}
+function openSave() { $('#sTrans').checked = S.bgT; dlg.showModal(); syncSaveUI(); }
+$('#bSave').onclick = openSave; $('#sClose').onclick = () => dlg.close();
+['#sFormat', '#sTarget', '#sUnit', '#sHidden', '#sTrans', '#sGz'].forEach(s => $(s).addEventListener('input', syncSaveUI));
+document.querySelectorAll('input[name=sMode]').forEach(r => r.addEventListener('change', syncSaveUI));
+
+async function saveSVG(o) {
+  const build = eps => exportSVGString({ prec: precFor(eps), eps, hidden: o.hidden, transparent: o.trans });
+  const sizeOf = async s => o.gz ? (await gzipBlob(s)).size : strBytes(s);
+  let str = build(0), size = await sizeOf(str), best = { str, size, eps: 0 }, ok = size <= o.target;
+  const orig = size;
+  if (o.comp && !ok) {
+    let lo = 0, hi = EPS.length - 1;
+    const sHi = build(EPS[hi]), zHi = await sizeOf(sHi); best = { str: sHi, size: zHi, eps: EPS[hi] };
+    if (zHi <= o.target) {
+      ok = true;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1; sInfo.textContent = `圧縮中… (許容誤差 ${EPS[mid]}px を試行)`; await tick();
+        const s = build(EPS[mid]), z = await sizeOf(s);
+        if (z <= o.target) { hi = mid; best = { str: s, size: z, eps: EPS[mid] }; } else lo = mid;
+      }
+    }
+  }
+  const blob = o.gz ? await gzipBlob(best.str) : new Blob([best.str], { type: 'image/svg+xml' });
+  download(blob, o.name + (o.gz ? '.svgz' : '.svg'));
+  let msg = `保存しました: ${fmtBytes(blob.size)}`;
+  if (o.comp) msg += ok ? (best.eps ? `（元 ${fmtBytes(orig)} → 目標 ${fmtBytes(o.target)} 以内。線を簡略化: 許容誤差 ${best.eps}px）` : '（圧縮不要：すでに目標以内）') : `（目標 ${fmtBytes(o.target)} には届きませんでした。最大限簡略化した結果です。gzipを併用するか、目標を上げてください）`;
+  sInfo.textContent = msg;
+}
+async function saveRaster(o) {
+  const mime = o.fmt === 'png' ? 'image/png' : 'image/jpeg';
+  const svgStr = exportSVGString({ hidden: false, transparent: o.trans && o.fmt === 'png' });
+  const enc = async (scale, q) => {
+    const w = Math.max(1, Math.round(S.W * scale)), h = Math.max(1, Math.round(S.H * scale));
+    const c = await svgToCanvas(svgStr, w, h, o.fmt === 'jpeg' ? '#ffffff' : null);
+    return { blob: await new Promise(r => c.toBlob(r, mime, q)), w, h };
+  };
+  const Q0 = 0.92; let r = await enc(1, Q0), note = '', ok = true;
+  if (o.comp && r.blob.size > o.target) {
+    ok = false; sInfo.textContent = '圧縮中…'; await tick();
+    if (o.fmt === 'jpeg') {
+      let lo = 0.05, hi = Q0, bestQ = null;
+      const lowest = await enc(1, lo);
+      if (lowest.blob.size <= o.target) {
+        bestQ = lowest; for (let i = 0; i < 7; i++) { const mid = (lo + hi) / 2, t = await enc(1, mid); if (t.blob.size <= o.target) { lo = mid; bestQ = t; } else hi = mid; }
+        r = bestQ; ok = true; note = `画質を調整（原寸 ${r.w}×${r.h}）`;
+      } else r = lowest;
+    }
+    if (!ok) {
+      let lo = 0.02, hi = 1; const q = o.fmt === 'jpeg' ? 0.3 : undefined;
+      const smallest = await enc(lo, q);
+      if (smallest.blob.size <= o.target) {
+        let best = smallest;
+        for (let i = 0; i < 8; i++) { const mid = (lo + hi) / 2; sInfo.textContent = `圧縮中… (縮小率 ${Math.round(mid * 100)}%)`; await tick(); const t = await enc(mid, q); if (t.blob.size <= o.target) { lo = mid; best = t; } else hi = mid; }
+        r = best; ok = true; note = `解像度を縮小（${r.w}×${r.h}）`;
+      } else r = smallest;
+    }
+  }
+  download(r.blob, o.name + (o.fmt === 'png' ? '.png' : '.jpg'));
+  sInfo.textContent = `保存しました: ${fmtBytes(r.blob.size)}（${r.w}×${r.h}px）` + (o.comp ? (ok ? (note ? ' ' + note : '（圧縮不要）') : `／目標 ${fmtBytes(o.target)} には届きませんでした`) : '');
+}
+$('#sGo').onclick = async () => {
+  const o = sOpts(); $('#sGo').disabled = true; sInfo.textContent = '処理中…'; await tick();
+  try { await (o.fmt === 'svg' ? saveSVG(o) : saveRaster(o)); }
+  catch (err) { console.error(err); sInfo.textContent = '保存に失敗しました: ' + err.message; }
+  finally { $('#sGo').disabled = false; }
+};
+
+/* ================= 起動 ================= */
+(function init() {
+  let s = null; try { s = JSON.parse(localStorage.getItem('svgdraw.v1') || 'null'); } catch (e) {}
+  if (s && s.layers && s.layers.length) { try { restore(s); } catch (e) { s = null; } }
+  if (!s) { const L = newLayer(); layers.push(L); activeId = L.id; syncLayersDOM(); updatePage(); renderLayers(); }
+  hist.stack = [snapshot()]; hist.idx = 0; updateHistBtns();
+  setColor(S.color); setTool('pen'); setPalm(true); $('#toast').classList.remove('show');
+  new ResizeObserver(() => { if (!init.done) { init.done = true; fit(); } }).observe(vp);
+  fit();
+})();
+})();
+</script>
+</body>
+</html>
