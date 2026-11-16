@@ -95,7 +95,7 @@ dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
   <button class="btn" id="bZin" title="拡大">＋</button>
   <button class="btn" id="bFit">全体表示</button>
   <span class="sep"></span>
-  <button class="btn on" id="bPalm" title="ONの間は指では描かず、ペンとマウスだけが描画します。指は2本でズーム／移動に使えます">パームリジェクション: ON</button>
+  <button class="btn on" id="bPalm" title="ONの間は指では描かず、ペンとマウスだけが描画します。指は1本で移動、2本でズーム／移動に使えます">パームリジェクション: ON</button>
   <button class="btn" id="panelBtn">パネル</button>
 </header>
 <main>
@@ -621,7 +621,7 @@ document.querySelectorAll('#tools button').forEach(b => b.onclick = () => setToo
 
 function setPalm(on) {
   S.palm = on; $('#bPalm').classList.toggle('on', on); $('#bPalm').textContent = 'パームリジェクション: ' + (on ? 'ON' : 'OFF');
-  $('#stPalm').textContent = on ? '指では描画しません（ペン／マウスのみ・2本指でズーム）' : '指でも描画できます（2本指でズーム）';
+  $('#stPalm').textContent = on ? '指では描画しません（ペン／マウスのみ・1本指で移動・2本指でズーム）' : '指でも描画できます（2本指でズーム）';
   toast(on ? 'パームリジェクション ON：ペン／マウスのみ描画' : 'パームリジェクション OFF：指でも描画できます');
 }
 $('#bPalm').onclick = () => setPalm(!S.palm);
@@ -898,8 +898,16 @@ vp.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') {
     const t = [...pointers.values()].filter(p => p.type === 'touch');
     if (t.length >= 2) { abortDraw(); startGesture(); return; }
-    if (S.palm) { pointers.get(e.pointerId).idle = true; if (!S.penSeen) toast('パームリジェクションON：指では描けません（2本指でズーム／移動、OFFで指描画）'); return; }
+    if (S.palm) {
+      // パームリジェクション中は1本指でキャンバスを移動
+      if (D) return;
+      pointers.get(e.pointerId).idle = true;
+      D = { kind: 'pan', touchPan: true, id: e.pointerId, sx: e.clientX, sy: e.clientY, vx: S.view.x, vy: S.view.y };
+      if (!S.penSeen) toast('パームリジェクションON：1本指で移動、2本指でズーム（OFFで指描画）');
+      return;
+    }
   }
+  if (D && D.touchPan && e.pointerType !== 'touch') abortDraw();
   if (G || D) return;
   const tool = effTool(e), [wx, wy] = toWorld(e.clientX, e.clientY);
   const pan = (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2)) || spaceDown || tool === 'hand';
