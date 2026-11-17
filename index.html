@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>SVGお絵かき</title>
+<title>Linea — Vector Sketch Studio</title>
 <style>
 :root{--bg:#f3f4f6;--panel:#fff;--line:#d9dce1;--text:#1f2937;--muted:#6b7280;--accent:#2563eb;--accent-weak:#dbeafe;--canvasbg:#d1d5db;--btn:#f3f4f6}
 @media (prefers-color-scheme:dark){:root{--bg:#1b1d21;--panel:#25282d;--line:#3a3e45;--text:#e5e7eb;--muted:#9ca3af;--accent:#60a5fa;--accent-weak:#1e3a5f;--canvasbg:#14161a;--btn:#31353c}}
@@ -82,7 +82,7 @@ dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 </head>
 <body>
 <header>
-  <h1>SVGお絵かき</h1>
+  <h1 title="Vector Sketch Studio" style="letter-spacing:.08em;font-weight:700">Linea<span style="font-weight:400;font-size:11px;color:var(--muted);margin-left:6px;letter-spacing:.04em">Vector Sketch Studio</span></h1>
   <button class="btn" id="bNew">新規</button>
   <button class="btn primary" id="bSave">保存</button>
   <button class="btn" id="bCanvas">キャンバス設定</button>
@@ -239,7 +239,7 @@ let sel = null;            // {els:[], bb:[]}
 let D = null;              // 現在の描画操作
 let G = null;              // ピンチジェスチャ
 const pointers = new Map();
-let lastPen = -1e9, penDown = false, spaceDown = false;
+let lastTap = null, lastPen = -1e9, penDown = false, spaceDown = false;
 
 /* ================= SVG 構造 ================= */
 const vp = $('#vp');
@@ -352,7 +352,18 @@ function filterMarkup(id) {
   const reg = `filterUnits="userSpaceOnUse" x="-200" y="-200" width="${S.W + 400}" height="${S.H + 400}" color-interpolation-filters="sRGB"`;
   if (id === 'pcl') return `<filter id="pcl" ${reg}><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  6 0 0 0 -1.9" result="m"/><feComposite in="SourceGraphic" in2="m" operator="in"/></filter>`;
   const std = +id.slice(2) / 100;
-  return `<filter id="${id}" ${reg}><feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="${fmt(std * 2.5, 2)}" xChannelSelector="R" yChannelSelector="G" result="d"/><feGaussianBlur in="d" stdDeviation="${fmt(std, 2)}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="d"/></feMerge></filter>`;
+  // 水彩: 縁の揺らぎ → 外側へのにじみ(ハロ) → 顔料が縁に溜まる輪郭 → 紙の粒状感
+  return `<filter id="${id}" ${reg}>` +
+    `<feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="3" seed="7" result="t"/>` +
+    `<feDisplacementMap in="SourceGraphic" in2="t" scale="${fmt(std * 3, 2)}" xChannelSelector="R" yChannelSelector="G" result="d"/>` +
+    `<feGaussianBlur in="d" stdDeviation="${fmt(std, 2)}" result="halo"/>` +
+    `<feComponentTransfer in="halo" result="halo2"><feFuncA type="linear" slope="0.55"/></feComponentTransfer>` +
+    `<feGaussianBlur in="d" stdDeviation="${fmt(std * 0.45, 2)}" result="b2"/>` +
+    `<feComposite in="d" in2="b2" operator="arithmetic" k1="0" k2="1.5" k3="-0.8" k4="0" result="rim"/>` +
+    `<feMerge result="paint"><feMergeNode in="halo2"/><feMergeNode in="rim"/></feMerge>` +
+    `<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" seed="11" result="g"/>` +
+    `<feColorMatrix in="g" type="matrix" values="1.2 0 0 0 0.4  1.2 0 0 0 0.4  1.2 0 0 0 0.4  1.2 0 0 0 0.4" result="g2"/>` +
+    `<feComposite in="paint" in2="g2" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/></filter>`;
 }
 function ensureFilter(id) { if (!filterIds.has(id)) { filterIds.add(id); defs.insertAdjacentHTML('beforeend', filterMarkup(id)); } }
 function refreshFilters() { defs.querySelectorAll('filter').forEach(f => f.remove()); for (const id of filterIds) defs.insertAdjacentHTML('beforeend', filterMarkup(id)); }
@@ -438,7 +449,8 @@ const ICON = {
 function newLayer(name, id) {
   id = id || ++layerSeq; layerSeq = Math.max(layerSeq, id);
   const g = el('g', { fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
-  return { id, name: name || `レイヤー ${id}`, visible: true, locked: false, opacity: 1, g, cache: '', dirty: true };
+  if (!name) { const used = new Set(layers.map(l => l.name)); let i = 1; while (used.has(`レイヤー ${i}`)) i++; name = `レイヤー ${i}`; }
+  return { id, name, visible: true, locked: false, opacity: 1, g, cache: '', dirty: true };
 }
 function applyLayerProps(L) { L.g.setAttribute('opacity', L.opacity); L.g.style.display = L.visible ? '' : 'none'; }
 const activeLayer = () => layers.find(l => l.id === activeId);
@@ -567,7 +579,7 @@ $('#hexIn').addEventListener('change', e => { setColor(e.target.value); e.target
 $('#bPick').onclick = () => setTool('picker');
 
 /* ペン種・消しゴム方式・背景 */
-const DEF_OP = { pen: 100, brush: 100, marker: 45, water: 55, pencil: 85 };
+const DEF_OP = { pen: 100, brush: 100, marker: 45, water: 70, pencil: 85 };
 function setPenType(t) {
   S.pen = t; S.opacity = DEF_OP[t]; $('#opRange').value = S.opacity; $('#opVal').textContent = S.opacity + '%';
   document.querySelectorAll('#penTypes button').forEach(b => b.classList.toggle('on', b.dataset.pt === t));
@@ -621,7 +633,7 @@ document.querySelectorAll('#tools button').forEach(b => b.onclick = () => setToo
 
 function setPalm(on) {
   S.palm = on; $('#bPalm').classList.toggle('on', on); $('#bPalm').textContent = 'パームリジェクション: ' + (on ? 'ON' : 'OFF');
-  $('#stPalm').textContent = on ? '指では描画しません（ペン／マウスのみ・1本指で移動・2本指でズーム）' : '指でも描画できます（2本指でズーム）';
+  $('#stPalm').textContent = on ? '指では描画しません（ペン／マウスのみ・1本指で移動・2本指でズーム・ダブルタップで1つ戻す）' :'指でも描画できます（2本指でズーム）';
   toast(on ? 'パームリジェクション ON：ペン／マウスのみ描画' : 'パームリジェクション OFF：指でも描画できます');
 }
 $('#bPalm').onclick = () => setPalm(!S.palm);
@@ -902,7 +914,7 @@ vp.addEventListener('pointerdown', e => {
       // パームリジェクション中は1本指でキャンバスを移動
       if (D) return;
       pointers.get(e.pointerId).idle = true;
-      D = { kind: 'pan', touchPan: true, id: e.pointerId, sx: e.clientX, sy: e.clientY, vx: S.view.x, vy: S.view.y };
+      D = { kind: 'pan', touchPan: true, t0: performance.now(), id: e.pointerId, sx: e.clientX, sy: e.clientY, vx: S.view.x, vy: S.view.y };
       if (!S.penSeen) toast('パームリジェクションON：1本指で移動、2本指でズーム（OFFで指描画）');
       return;
     }
@@ -990,6 +1002,14 @@ vp.addEventListener('pointermove', e => {
 
 function finish(e, cancelled) {
   const d = D; D = null;
+  if (d.kind === 'pan' && d.touchPan && !cancelled) {
+    // ダブルタップで1つ戻す
+    const now = performance.now(), moved = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+    if (moved < 12 && now - d.t0 < 300) {
+      if (lastTap && now - lastTap.t < 400 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) { lastTap = null; undo(); }
+      else lastTap = { t: now, x: e.clientX, y: e.clientY };
+    } else lastTap = null;
+  }
   if (d.kind === 'pan') { vp.style.cursor = S.tool === 'hand' ? 'grab' : 'crosshair'; return; }
   if (cancelled) { if (d.path) d.path.remove(); if (d.kind === 'selmove') { sel.els.forEach((el_, i) => setM(el_, d.orig[i])); drawSel(); } if (d.kind === 'eraser' && d.n) pushHistory(); return; }
   switch (d.kind) {
