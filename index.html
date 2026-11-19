@@ -190,7 +190,7 @@ dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 <dialog id="dlgSave">
   <h2>保存</h2>
   <label>形式
-    <select id="sFormat"><option value="svg">SVG（ベクター）</option><option value="png">PNG</option><option value="jpeg">JPEG</option></select>
+    <select id="sFormat"><option value="svg">SVG（ベクター）</option><option value="ai">AI（Adobe Illustrator）</option><option value="pdf">PDF</option><option value="psd">PSD（Adobe Photoshop・レイヤー付き）</option><option value="png">PNG</option><option value="jpeg">JPEG</option></select>
   </label>
   <fieldset>
     <legend>サイズ</legend>
@@ -198,7 +198,7 @@ dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
     <label><input type="radio" name="sMode" value="comp"> 指定した容量まで圧縮して保存</label>
     <div class="row" id="targetRow" style="margin-left:24px">上限 <input type="number" id="sTarget" min="1" step="any" value="500"> <select id="sUnit"><option value="1024">KB</option><option value="1048576">MB</option></select></div>
   </fieldset>
-  <label id="hidRow"><input type="checkbox" id="sHidden"> 非表示レイヤーも含める（SVGのみ）</label>
+  <label id="hidRow"><input type="checkbox" id="sHidden"> 非表示レイヤーも含める（SVG / AI / PSD）</label>
   <label><input type="checkbox" id="sTrans"> 背景を透明にする</label>
   <label id="gzRow"><input type="checkbox" id="sGz"> gzip圧縮する (.svgz)</label>
   <label>ファイル名 <input type="text" id="sName" value="drawing" style="flex:1"></label>
@@ -1114,9 +1114,9 @@ const dlg = $('#dlgSave'), sInfo = $('#sInfo');
 const sOpts = () => ({ fmt: $('#sFormat').value, comp: document.querySelector('input[name=sMode]:checked').value === 'comp',
   target: Math.max(1, (parseFloat($('#sTarget').value) || 1) * +$('#sUnit').value), hidden: $('#sHidden').checked, trans: $('#sTrans').checked, gz: $('#sGz').checked && hasGz, name: ($('#sName').value.trim() || 'drawing').replace(/[\\/:*?"<>|]/g, '_') });
 function syncSaveUI() {
-  const o = sOpts(), svgF = o.fmt === 'svg';
+  const o = sOpts(), svgF = o.fmt === 'svg', layered = svgF || o.fmt === 'ai' || o.fmt === 'pdf' || o.fmt === 'psd';
   $('#targetRow').style.opacity = o.comp ? 1 : .4; $('#sTarget').disabled = $('#sUnit').disabled = !o.comp;
-  $('#hidRow').style.display = $('#gzRow').style.display = svgF ? '' : 'none';
+  $('#hidRow').style.display = layered ? '' : 'none'; $('#gzRow').style.display = svgF ? '' : 'none';
   $('#gzRow').style.opacity = hasGz ? 1 : .4; $('#sGz').disabled = !hasGz;
   if (o.fmt === 'jpeg') { $('#sTrans').checked = false; } $('#sTrans').disabled = o.fmt === 'jpeg';
   estimate();
@@ -1126,6 +1126,8 @@ function estimate() {
   clearTimeout(estTimer);
   estTimer = setTimeout(async () => {
     const o = sOpts();
+    if (o.fmt === 'ai' || o.fmt === 'pdf') { sInfo.textContent = `そのままのサイズで保存した場合: 約 ${fmtBytes(strBytes(exportPDFString({ hidden: o.hidden, transparent: o.trans })))}（ベクター・レイヤー保持。水彩／鉛筆の効果は通常の線になります）`; return; }
+    if (o.fmt === 'psd') { sInfo.textContent = `出力サイズ: ${S.W} × ${S.H} px・レイヤー付き（ベクターはラスター化されます）`; return; }
     if (o.fmt !== 'svg') { sInfo.textContent = `出力サイズ: ${S.W} × ${S.H} px（原寸）`; return; }
     const s = exportSVGString({ hidden: o.hidden, transparent: o.trans });
     const size = o.gz ? (await gzipBlob(s)).size : strBytes(s);
@@ -1138,7 +1140,8 @@ $('#bSave').onclick = openSave; $('#sClose').onclick = () => dlg.close();
 document.querySelectorAll('input[name=sMode]').forEach(r => r.addEventListener('change', syncSaveUI));
 
 async function saveSVG(o) {
-  const build = eps => exportSVGString({ prec: precFor(eps), eps, hidden: o.hidden, transparent: o.trans });
+  const ai = o.fmt === 'ai' || o.fmt === 'pdf', ext = o.fmt === 'pdf' ? '.pdf' : '.ai'; if (ai) o = { ...o, gz: false };
+  const build = eps => (ai ? exportPDFString : exportSVGString)({ prec: precFor(eps), eps, hidden: o.hidden, transparent: o.trans });
   const sizeOf = async s => o.gz ? (await gzipBlob(s)).size : strBytes(s);
   let str = build(0), size = await sizeOf(str), best = { str, size, eps: 0 }, ok = size <= o.target;
   const orig = size;
@@ -1154,8 +1157,8 @@ async function saveSVG(o) {
       }
     }
   }
-  const blob = o.gz ? await gzipBlob(best.str) : new Blob([best.str], { type: 'image/svg+xml' });
-  download(blob, o.name + (o.gz ? '.svgz' : '.svg'));
+  const blob = o.gz ? await gzipBlob(best.str) : new Blob([best.str], { type: ai ? (o.fmt === 'pdf' ? 'application/pdf' : 'application/illustrator') : 'image/svg+xml' });
+  download(blob, o.name + (ai ? ext : o.gz ? '.svgz' : '.svg'));
   let msg = `保存しました: ${fmtBytes(blob.size)}`;
   if (o.comp) msg += ok ? (best.eps ? `（元 ${fmtBytes(orig)} → 目標 ${fmtBytes(o.target)} 以内。線を簡略化: 許容誤差 ${best.eps}px）` : '（圧縮不要：すでに目標以内）') : `（目標 ${fmtBytes(o.target)} には届きませんでした。最大限簡略化した結果です。gzipを併用するか、目標を上げてください）`;
   sInfo.textContent = msg;
@@ -1192,9 +1195,156 @@ async function saveRaster(o) {
   download(r.blob, o.name + (o.fmt === 'png' ? '.png' : '.jpg'));
   sInfo.textContent = `保存しました: ${fmtBytes(r.blob.size)}（${r.w}×${r.h}px）` + (o.comp ? (ok ? (note ? ' ' + note : '（圧縮不要）') : `／目標 ${fmtBytes(o.target)} には届きませんでした`) : '');
 }
+/* ===== AI（Illustrator）: PDF互換形式で出力。レイヤーはPDFのレイヤー(OCG)として保持 ===== */
+function dToPdf(d, prec) {
+  const t = d.match(/[MLQlZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || []; let i = 0, cx = 0, cy = 0, out = ''; const f = v => fmt(v, prec), num = () => +t[i++];
+  while (i < t.length) {
+    const k = t[i++];
+    if (k === 'M') { cx = num(); cy = num(); out += `${f(cx)} ${f(cy)} m\n`; }
+    else if (k === 'L') { cx = num(); cy = num(); out += `${f(cx)} ${f(cy)} l\n`; }
+    else if (k === 'l') { cx += num(); cy += num(); out += `${f(cx)} ${f(cy)} l\n`; }
+    else if (k === 'Q') {
+      const qx = num(), qy = num(), x = num(), y = num();
+      out += `${f(cx + 2/3 * (qx - cx))} ${f(cy + 2/3 * (qy - cy))} ${f(x + 2/3 * (qx - x))} ${f(y + 2/3 * (qy - y))} ${f(x)} ${f(y)} c\n`; cx = x; cy = y;
+    } else if (k === 'Z' || k === 'z') out += 'h\n';
+  }
+  return out;
+}
+function exportPDFString({ prec = 2, eps = 0, hidden = false, transparent = S.bgT } = {}) {
+  const W = S.W, H = S.H, gsMap = new Map(), gsList = [], pp = prec + 1;
+  const gs = (a, bm) => { const k = fmt(a, 3) + bm; let n = gsMap.get(k); if (!n) { n = 'G' + gsList.length; gsMap.set(k, n); gsList.push(`/${n} << /Type /ExtGState /CA ${fmt(a, 3)} /ca ${fmt(a, 3)} /BM /${bm} >>`); } return n; };
+  const rgb = c => { const n = parseInt(String(c).replace('#', ''), 16) || 0; return [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => fmt(v / 255, 3)).join(' '); };
+  let c = `1 0 0 -1 0 ${H} cm\n`;
+  if (!transparent) c += `${rgb(S.bg)} rg /${gs(1, 'Normal')} gs 0 0 ${W} ${H} re f\n`;
+  const ocs = [];
+  for (const L of layers) {
+    if ((!L.visible && !hidden) || !L.g.children.length) continue;
+    c += `/OC /OC${ocs.length} BDC\n`; ocs.push(L);
+    for (const e of L.g.children) {
+      const m = meta(e); let s = 'q\n';
+      if (e.getAttribute('transform')) s += getM(e).map(v => +v.toFixed(6)).join(' ') + ' cm\n';
+      if (m.k === 's') {
+        const i = sinfo(e), P = eps > 0 ? rdp(m.loops[0], eps) : m.loops[0], a = i.o * L.opacity, d = dToPdf(strokeD2(i.t, P, i.w, prec), pp);
+        if (i.t === 'brush') s += `${rgb(i.c)} rg /${gs(a, 'Normal')} gs\n${d}f\n`;
+        else s += `${fmt(i.w, 3)} w ${i.t === 'marker' ? 2 : 1} J 1 j ${rgb(i.c)} RG /${gs(a, i.t === 'marker' ? 'Multiply' : 'Normal')} gs\n${d}S\n`;
+      } else {
+        const loops = (eps > 0 ? m.loops.map(P => rdpClosed(P, eps)) : m.loops).filter(P => P.length >= 6); if (!loops.length) continue;
+        s += `${rgb(e.getAttribute('fill'))} rg /${gs(parseFloat(e.getAttribute('fill-opacity') || 1) * L.opacity, 'Normal')} gs\n${dToPdf(polyD(loops, prec), pp)}f*\n`;
+      }
+      c += s + 'Q\n';
+    }
+    c += 'EMC\n';
+  }
+  const hex = n => { let h = 'FEFF'; for (let i = 0; i < n.length; i++) h += n.charCodeAt(i).toString(16).padStart(4, '0'); return h; };
+  const refs = ocs.map((_, i) => `${5 + i} 0 R`), objs = [null];
+  objs[1] = `<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [${refs.join(' ')}] /D << /Order [${refs.join(' ')}] /OFF [${ocs.map((L, i) => L.visible ? '' : refs[i]).join(' ')}] >> >> >>`;
+  objs[2] = '<< /Type /Pages /Kids [3 0 R] /Count 1 >>';
+  objs[3] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Contents 4 0 R /Resources << /ExtGState << ${gsList.join(' ')} >> /Properties << ${ocs.map((_, i) => `/OC${i} ${refs[i]}`).join(' ')} >> >> >>`;
+  objs[4] = `<< /Length ${c.length} >>\nstream\n${c}endstream`;
+  ocs.forEach((L, i) => objs[5 + i] = `<< /Type /OCG /Name <${hex(L.name)}> >>`);
+  let out = '%PDF-1.5\n'; const offs = [];
+  for (let i = 1; i < objs.length; i++) { offs[i] = out.length; out += `${i} 0 obj\n${objs[i]}\nendobj\n`; }
+  const xr = out.length; out += `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i++) out += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+  return out + `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`;
+}
+
+/* ===== PSD（レイヤー付き・RLE圧縮・RGB 8bit） ===== */
+class BW {
+  constructor() { this.parts = []; this.len = 0; }
+  u8(v) { this.parts.push(Uint8Array.of(v & 255)); this.len++; }
+  u16(v) { this.parts.push(Uint8Array.of((v >> 8) & 255, v & 255)); this.len += 2; }
+  u32(v) { this.parts.push(Uint8Array.of((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255)); this.len += 4; }
+  bytes(a) { a = a instanceof Uint8Array ? a : Uint8Array.from(a); this.parts.push(a); this.len += a.length; }
+  str(s) { this.bytes(Array.from(s, ch => ch.charCodeAt(0) & 255)); }
+  pad(n) { while (this.len % n) this.u8(0); }
+  concat() { const o = new Uint8Array(this.len); let p = 0; for (const a of this.parts) { o.set(a, p); p += a.length; } return o; }
+}
+function packBits(row) {
+  const out = [], n = row.length; let i = 0;
+  while (i < n) {
+    let r = 1; while (i + r < n && r < 128 && row[i + r] === row[i]) r++;
+    if (r >= 2) { out.push(257 - r, row[i]); i += r; }
+    else { const s = i; let len = 1; i++; while (i < n && len < 128 && !(i + 1 < n && row[i] === row[i + 1])) { len++; i++; } out.push(len - 1); for (let k = s; k < s + len; k++) out.push(row[k]); }
+  }
+  return Uint8Array.from(out);
+}
+function rleRows(plane, w, h) { const counts = [], rows = []; for (let y = 0; y < h; y++) { const r = packBits(plane.subarray(y * w, (y + 1) * w)); counts.push(r.length); rows.push(r); } return { counts, rows }; }
+function layerChannelBytes(plane, w, h) {
+  if (!w || !h) return Uint8Array.of(0, 0);
+  const { counts, rows } = rleRows(plane, w, h), b = new BW(); b.u16(1); counts.forEach(c => b.u16(c)); rows.forEach(r => b.bytes(r)); return b.concat();
+}
+function layerSVGStr(L, w, h) {
+  return `<svg xmlns="${NS}" width="${w}" height="${h}" viewBox="0 0 ${S.W} ${S.H}">${filtDefs()}<g fill="none" stroke-linecap="round" stroke-linejoin="round">${L.g.innerHTML.replace(/ data-p="[^"]*"/g, '')}</g></svg>`;
+}
+async function buildPSD(items, scale, hasAlpha) {
+  const w = Math.max(1, Math.round(S.W * scale)), h = Math.max(1, Math.round(S.H * scale));
+  const comp = document.createElement('canvas'); comp.width = w; comp.height = h; const cctx = comp.getContext('2d', { willReadFrequently: true }), recs = [];
+  for (const it of items) {
+    let cv = it.canvas;
+    if (scale !== 1) { cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(it.canvas, 0, 0, w, h); }
+    const data = cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    const rec = { name: it.name, op: Math.round(it.opacity * 255), visible: it.visible };
+    if (x1 < 0) { rec.top = rec.left = rec.bottom = rec.right = 0; rec.ch = [0, 1, 2, 3].map(() => Uint8Array.of(0, 0)); }
+    else {
+      const cw = x1 - x0 + 1, chh = y1 - y0 + 1, P = [0, 1, 2, 3].map(() => new Uint8Array(cw * chh));
+      for (let yy = 0; yy < chh; yy++) for (let xx = 0; xx < cw; xx++) { const i = ((y0 + yy) * w + x0 + xx) * 4, k = yy * cw + xx; P[0][k] = data[i+3]; P[1][k] = data[i]; P[2][k] = data[i+1]; P[3][k] = data[i+2]; }
+      rec.top = y0; rec.left = x0; rec.bottom = y1 + 1; rec.right = x1 + 1; rec.ch = P.map(p => layerChannelBytes(p, cw, chh));
+    }
+    recs.push(rec);
+    if (it.visible) { cctx.globalAlpha = it.opacity; cctx.drawImage(cv, 0, 0); }
+    await tick();
+  }
+  const cd = cctx.getImageData(0, 0, w, h).data, nch = hasAlpha ? 4 : 3, planes = [];
+  for (let c = 0; c < nch; c++) { const p = new Uint8Array(w * h); for (let i = 0; i < p.length; i++) p[i] = cd[i * 4 + c]; planes.push(p); }
+  const bw = new BW();
+  bw.str('8BPS'); bw.u16(1); bw.bytes(new Uint8Array(6)); bw.u16(nch); bw.u32(h); bw.u32(w); bw.u16(8); bw.u16(3);
+  bw.u32(0); bw.u32(0);
+  const li = new BW(); li.u16(hasAlpha ? (-recs.length) & 0xffff : recs.length);
+  for (const r of recs) {
+    li.u32(r.top); li.u32(r.left); li.u32(r.bottom); li.u32(r.right); li.u16(4);
+    [-1, 0, 1, 2].forEach((id, k) => { li.u16(id & 0xffff); li.u32(r.ch[k].length); });
+    li.str('8BIM'); li.str('norm'); li.u8(r.op); li.u8(0); li.u8(r.visible ? 0 : 2); li.u8(0);
+    const ex = new BW(); ex.u32(0); ex.u32(0);
+    const asc = (r.name.replace(/[^\x20-\x7e]/g, '?').slice(0, 31)) || 'Layer'; ex.u8(asc.length); ex.str(asc); ex.pad(4);
+    const lu = new BW(); lu.u32(r.name.length); for (let i = 0; i < r.name.length; i++) lu.u16(r.name.charCodeAt(i)); lu.pad(4);
+    ex.str('8BIM'); ex.str('luni'); ex.u32(lu.len); ex.bytes(lu.concat());
+    li.u32(ex.len); li.bytes(ex.concat());
+  }
+  for (const r of recs) for (const c of r.ch) li.bytes(c);
+  if (li.len % 2) li.u8(0);
+  bw.u32(4 + li.len + 4); bw.u32(li.len); bw.bytes(li.concat()); bw.u32(0);
+  bw.u16(1); const enc = planes.map(p => rleRows(p, w, h));
+  enc.forEach(e => e.counts.forEach(c => bw.u16(c))); enc.forEach(e => e.rows.forEach(r => bw.bytes(r)));
+  return { blob: new Blob([bw.concat()], { type: 'image/vnd.adobe.photoshop' }), w, h };
+}
+async function savePSD(o) {
+  sInfo.textContent = 'レイヤーを描画中…'; await tick();
+  const W = S.W, H = S.H, hasAlpha = o.trans, items = [];
+  if (!hasAlpha) { const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); x.fillStyle = S.bg; x.fillRect(0, 0, W, H); items.push({ name: '背景', opacity: 1, visible: true, canvas: c }); }
+  for (const L of layers) {
+    if (!L.visible && !o.hidden) continue;
+    items.push({ name: L.name, opacity: L.opacity, visible: L.visible, canvas: await svgToCanvas(layerSVGStr(L, W, H), W, H) });
+  }
+  if (!items.length) { const c = document.createElement('canvas'); c.width = W; c.height = H; items.push({ name: 'レイヤー', opacity: 1, visible: true, canvas: c }); }
+  sInfo.textContent = 'PSDを生成中…'; await tick();
+  let r = await buildPSD(items, 1, hasAlpha), ok = true, note = '';
+  if (o.comp && r.blob.size > o.target) {
+    ok = false; let lo = 0.02, hi = 1; const small = await buildPSD(items, lo, hasAlpha);
+    if (small.blob.size <= o.target) {
+      let best = small;
+      for (let i = 0; i < 7; i++) { const mid = (lo + hi) / 2; sInfo.textContent = `圧縮中… (縮小率 ${Math.round(mid * 100)}%)`; const t = await buildPSD(items, mid, hasAlpha); if (t.blob.size <= o.target) { lo = mid; best = t; } else hi = mid; }
+      r = best; ok = true; note = `解像度を縮小（${r.w}×${r.h}）`;
+    } else r = small;
+  }
+  download(r.blob, o.name + '.psd');
+  sInfo.textContent = `保存しました: ${fmtBytes(r.blob.size)}（${r.w}×${r.h}px・${items.length}レイヤー）` + (o.comp ? (ok ? (note ? ' ' + note : '（圧縮不要）') : `／目標 ${fmtBytes(o.target)} には届きませんでした`) : '');
+}
 $('#sGo').onclick = async () => {
   const o = sOpts(); $('#sGo').disabled = true; sInfo.textContent = '処理中…'; await tick();
-  try { await (o.fmt === 'svg' ? saveSVG(o) : saveRaster(o)); }
+  try { await (o.fmt === 'svg' || o.fmt === 'ai' || o.fmt === 'pdf' ? saveSVG(o) : o.fmt === 'psd' ? savePSD(o) : saveRaster(o)); }
   catch (err) { console.error(err); sInfo.textContent = '保存に失敗しました: ' + err.message; }
   finally { $('#sGo').disabled = false; }
 };
